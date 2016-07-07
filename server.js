@@ -46,7 +46,22 @@ app.get('/', function (req, res) {
 });
 
 app.get('/todos', function (req, res) {
-	 res.json(todos);
+	var queryParams = req.query;
+	var filteredTodos = todos;
+
+	if (queryParams.hasOwnProperty('complete') && queryParams.complete === 'true') {
+		filteredTodos = _.where(filteredTodos, {complete: true});
+	} else if (queryParams.hasOwnProperty('complete') && queryParams.complete === 'false') {
+		filteredTodos = _.where(filteredTodos, {complete: false});
+	}
+
+	if (queryParams.hasOwnProperty('q') && queryParams.q.length > 0) {
+		filteredTodos = _.filter(filteredTodos, function(todo) {
+			return todo.description.toLowerCase().indexOf(queryParams.q.toLowerCase()) > -1;
+		});
+	}
+
+	res.json(filteredTodos);
 });
 
 app.get('/todos/:id', function (req, res) {
@@ -100,7 +115,6 @@ app.put('/todos/:id', function (req, res) {
 
 	 if (body.hasOwnProperty('complete') && _.isBoolean(body.complete)) {
 	 	validAttr.complete = body.complete;
-
 	 } else if (body.hasOwnProperty('complete')) {
 	 	return res.status(400).json({ "error": "complete property has invalid content"});
 	 }
@@ -108,7 +122,6 @@ app.put('/todos/:id', function (req, res) {
 	 if(body.hasOwnProperty('description') && _.isString(body.description) 
 	 	&& body.description.trim().length > 0) {
 	 	validAttr.description = body.description;
-
 	 } else if (body.hasOwnProperty('description')) {
 	 	return res.status(400).json({ "error": "description property has invalid content"});
 	 }
