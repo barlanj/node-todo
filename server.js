@@ -24,7 +24,6 @@ for (var i = uniqueID; i < 3; i++) {
 	uniqueID++;
 }
 
-
 function getTodoItem(key, arr) {
 
 	return _.findWhere(arr, {id: Number(key)});
@@ -34,6 +33,11 @@ function addTodoItem(item) {
 
 	item.id = todos.length;
 	todos.push(item);
+}
+
+function deleteTodoItem(item, arr) {
+
+	todos = _.without(arr, item);
 }
 
 //-----------------------------------------------------------
@@ -49,7 +53,7 @@ app.get('/todos/:id', function (req, res) {
 	 var fetchedItem = getTodoItem(req.params.id, todos);
 
 	 if(!fetchedItem) {
-	 	res.status(404).send();
+	 	res.status(404).json({ "error": "no todo item found with given id"});
 	 } else {
 	 	res.json([fetchedItem]);
 	 }
@@ -62,14 +66,56 @@ app.post('/todos', function (req, res) {
 	 if (!_.isBoolean(body.complete) || !_.isString(body.description) 
 	 	|| body.description.trim().length === 0) {
 
-	 	return res.status(400).send();
+	 	return res.status(400).json({ "error": "key value pairs provided are not valid"});
 	 }
 
 	 body.description = body.description.trim();
 	 addTodoItem(body);
-	 
+
 	 res.json(todos);
 	 
+});
+
+app.delete('/todos/:id', function (req, res) {
+	 var fetchedItem = getTodoItem(req.params.id, todos);
+
+	 if(!fetchedItem) {
+	 	res.status(404).json({ "error": "no todo found with given id"});
+	 } else {
+	 	deleteTodoItem(fetchedItem, todos);
+	 	res.json([fetchedItem]);
+	 }
+
+});
+
+
+app.put('/todos/:id', function (req, res) {
+	 var body = _.pick(req.body, 'description', 'complete');
+	 var fetchedItem = getTodoItem(req.params.id, todos);
+	 var validAttr = {};
+	 
+	 if(!fetchedItem) {
+	 	return res.status(404).json({ "error": "no todo found with given id"});
+	 }
+
+	 if (body.hasOwnProperty('complete') && _.isBoolean(body.complete)) {
+	 	validAttr.complete = body.complete;
+
+	 } else if (body.hasOwnProperty('complete')) {
+	 	return res.status(400).json({ "error": "complete property has invalid content"});
+	 }
+
+	 if(body.hasOwnProperty('description') && _.isString(body.description) 
+	 	&& body.description.trim().length > 0) {
+	 	validAttr.description = body.description;
+
+	 } else if (body.hasOwnProperty('description')) {
+	 	return res.status(400).json({ "error": "description property has invalid content"});
+	 }
+
+	 _.extend(fetchedItem, validAttr);
+
+	 res.json(fetchedItem);
 });
 
 //------------------------------------------------------------
