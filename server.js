@@ -3,47 +3,10 @@ var bodyParser = require('body-parser');
 var _ = require('underscore');
 var db = require('./database.js');
 
-
 var app = express();
 var PORT = process.env.PORT || 3000;
-var uniqueID = 0;
-
-var todos = [];
-
 
 app.use(bodyParser.json());
-
-//--------------------------------------------------------
-function TodoItem(key, desc, done) {
-	this.id = key;
-	this.description = desc;
-	this.complete = done;
-}
-
-for (var i = uniqueID; i < 3; i++) {
-	var task = new TodoItem(i, 'task_' + i, false);
-	todos.push(task);
-	uniqueID++;
-}
-
-function getTodoItem(key, arr) {
-
-	return _.findWhere(arr, {
-		id: Number(key)
-	});
-}
-
-function addTodoItem(item) {
-
-	item.id = todos.length;
-	todos.push(item);
-}
-
-function deleteTodoItem(item, arr) {
-
-	todos = _.without(arr, item);
-}
-
 //-----------------------------------------------------------
 app.get('/', function(req, res) {
 	res.send('root');
@@ -104,10 +67,10 @@ app.delete('/todos/:id', function(req, res) {
 
 	db.todo.findById(todoId).then(function(todo) {
 		if(!!todo) {
-			res.json(todo.toJSON());
 			todo.destroy();
+			res.json({ message: "successfully deleted todo" });
 		} else {
-			res.status(404).send();
+			res.status(404).json({ error: "id not found"});
 		}
 	}, function(e) {
 		res.status(500).send();
@@ -117,36 +80,32 @@ app.delete('/todos/:id', function(req, res) {
 
 
 app.put('/todos/:id', function(req, res) {
+	var todoId = parseInt(req.params.id, 10);
 	var body = _.pick(req.body, 'description', 'complete');
-	var fetchedItem = getTodoItem(req.params.id, todos);
-	var validAttr = {};
+	var attributes = {};
 
-	if (!fetchedItem) {
-		return res.status(404).json({
-			"error": "no todo found with given id"
-		});
+	if (body.hasOwnProperty('complete')) {
+		attributes.complete = body.complete;
+	} 
+
+	if (body.hasOwnProperty('description')) {
+		attributes.description = body.description;
 	}
 
-	if (body.hasOwnProperty('complete') && _.isBoolean(body.complete)) {
-		validAttr.complete = body.complete;
-	} else if (body.hasOwnProperty('complete')) {
-		return res.status(400).json({
-			"error": "complete property has invalid content"
-		});
-	}
+	db.todo.findById(todoId).then(function(todo) {
+		if (todo) {
+			todo.update(attributes).then(function (todo) {
+				res.json(todo.toJSON());
+			}).catch(function(e) {
+				res.status(400).json(e);
+			});
+		} else {
+			res.status(404).json({ error: "id not found"});
+		}
+	}).catch(function (e) {
+		res.status(500).send();
+	});
 
-	if (body.hasOwnProperty('description') && _.isString(body.description) &&
-		body.description.trim().length > 0) {
-		validAttr.description = body.description;
-	} else if (body.hasOwnProperty('description')) {
-		return res.status(400).json({
-			"error": "description property has invalid content"
-		});
-	}
-
-	_.extend(fetchedItem, validAttr);
-
-	res.json(fetchedItem);
 });
 
 //------------------------------------------------------------
