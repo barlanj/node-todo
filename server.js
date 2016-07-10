@@ -1,6 +1,8 @@
 var express = require('express');
 var bodyParser = require('body-parser');
 var _ = require('underscore');
+var db = require('./database.js');
+
 
 var app = express();
 var PORT = process.env.PORT || 3000;
@@ -12,7 +14,7 @@ var todos = [];
 app.use(bodyParser.json());
 
 //--------------------------------------------------------
-function TodoItem (key, desc, done) {
+function TodoItem(key, desc, done) {
 	this.id = key;
 	this.description = desc;
 	this.complete = done;
@@ -26,7 +28,9 @@ for (var i = uniqueID; i < 3; i++) {
 
 function getTodoItem(key, arr) {
 
-	return _.findWhere(arr, {id: Number(key)});
+	return _.findWhere(arr, {
+		id: Number(key)
+	});
 }
 
 function addTodoItem(item) {
@@ -41,98 +45,116 @@ function deleteTodoItem(item, arr) {
 }
 
 //-----------------------------------------------------------
-app.get('/', function (req, res) {
-	 res.send('root'); 
+app.get('/', function(req, res) {
+	res.send('root');
 });
 
-app.get('/todos', function (req, res) {
-	var queryParams = req.query;
-	var filteredTodos = todos;
+app.get('/todos', function(req, res) {
+	var query = req.query;
+	var where = {};
 
-	if (queryParams.hasOwnProperty('complete') && queryParams.complete === 'true') {
-		filteredTodos = _.where(filteredTodos, {complete: true});
-	} else if (queryParams.hasOwnProperty('complete') && queryParams.complete === 'false') {
-		filteredTodos = _.where(filteredTodos, {complete: false});
+	if (query.hasOwnProperty('complete') && query.complete === 'true') {
+		where.complete = true;
+	} else if (query.hasOwnProperty('complete') && query.complete === 'false') {
+		where.complete = false;
 	}
 
-	if (queryParams.hasOwnProperty('q') && queryParams.q.length > 0) {
-		filteredTodos = _.filter(filteredTodos, function(todo) {
-			return todo.description.toLowerCase().indexOf(queryParams.q.toLowerCase()) > -1;
+	if (query.hasOwnProperty('q') && query.q.length > 0) {
+		where.description = {
+			$like: '%' + query.q + '%'
+		};
+	}
+
+	db.todo.findAll({where: where}).then(function (todos) {
+		res.json(todos);
+	}, function (e) {
+		res.status(500).send();
+	});
+
+});
+
+app.get('/todos/:id', function(req, res) {
+	var todoId = parseInt(req.params.id, 10);
+
+	db.todo.findById(todoId).then(function(todo) {
+		if(!!todo) {
+			res.json(todo.toJSON());
+		} else {
+			res.status(404).send();
+		}
+	}, function(e) {
+		res.status(500).send();
+	});
+
+});
+
+app.post('/todos', function(req, res) {
+	var body = _.pick(req.body, 'description', 'complete');
+
+	db.todo.create(body).then(function(todo) {
+		res.json(todo.toJSON());
+	}, function(e) {
+		res.status(400).json(e);
+	});
+
+});
+
+app.delete('/todos/:id', function(req, res) {
+	var todoId = parseInt(req.params.id, 10);
+
+	db.todo.findById(todoId).then(function(todo) {
+		if(!!todo) {
+			res.json(todo.toJSON());
+			todo.destroy();
+		} else {
+			res.status(404).send();
+		}
+	}, function(e) {
+		res.status(500).send();
+	});
+
+});
+
+
+app.put('/todos/:id', function(req, res) {
+	var body = _.pick(req.body, 'description', 'complete');
+	var fetchedItem = getTodoItem(req.params.id, todos);
+	var validAttr = {};
+
+	if (!fetchedItem) {
+		return res.status(404).json({
+			"error": "no todo found with given id"
 		});
 	}
 
-	res.json(filteredTodos);
-});
+	if (body.hasOwnProperty('complete') && _.isBoolean(body.complete)) {
+		validAttr.complete = body.complete;
+	} else if (body.hasOwnProperty('complete')) {
+		return res.status(400).json({
+			"error": "complete property has invalid content"
+		});
+	}
 
-app.get('/todos/:id', function (req, res) {
-	 var fetchedItem = getTodoItem(req.params.id, todos);
+	if (body.hasOwnProperty('description') && _.isString(body.description) &&
+		body.description.trim().length > 0) {
+		validAttr.description = body.description;
+	} else if (body.hasOwnProperty('description')) {
+		return res.status(400).json({
+			"error": "description property has invalid content"
+		});
+	}
 
-	 if(!fetchedItem) {
-	 	res.status(404).json({ "error": "no todo item found with given id"});
-	 } else {
-	 	res.json([fetchedItem]);
-	 }
+	_.extend(fetchedItem, validAttr);
 
-});
-
-app.post('/todos', function (req, res) {
-	 var body = _.pick(req.body, 'description', 'complete');
-
-	 if (!_.isBoolean(body.complete) || !_.isString(body.description) 
-	 	|| body.description.trim().length === 0) {
-
-	 	return res.status(400).json({ "error": "key value pairs provided are not valid"});
-	 }
-
-	 body.description = body.description.trim();
-	 addTodoItem(body);
-
-	 res.json(todos);
-	 
-});
-
-app.delete('/todos/:id', function (req, res) {
-	 var fetchedItem = getTodoItem(req.params.id, todos);
-
-	 if(!fetchedItem) {
-	 	res.status(404).json({ "error": "no todo found with given id"});
-	 } else {
-	 	deleteTodoItem(fetchedItem, todos);
-	 	res.json([fetchedItem]);
-	 }
-
-});
-
-
-app.put('/todos/:id', function (req, res) {
-	 var body = _.pick(req.body, 'description', 'complete');
-	 var fetchedItem = getTodoItem(req.params.id, todos);
-	 var validAttr = {};
-	 
-	 if(!fetchedItem) {
-	 	return res.status(404).json({ "error": "no todo found with given id"});
-	 }
-
-	 if (body.hasOwnProperty('complete') && _.isBoolean(body.complete)) {
-	 	validAttr.complete = body.complete;
-	 } else if (body.hasOwnProperty('complete')) {
-	 	return res.status(400).json({ "error": "complete property has invalid content"});
-	 }
-
-	 if(body.hasOwnProperty('description') && _.isString(body.description) 
-	 	&& body.description.trim().length > 0) {
-	 	validAttr.description = body.description;
-	 } else if (body.hasOwnProperty('description')) {
-	 	return res.status(400).json({ "error": "description property has invalid content"});
-	 }
-
-	 _.extend(fetchedItem, validAttr);
-
-	 res.json(fetchedItem);
+	res.json(fetchedItem);
 });
 
 //------------------------------------------------------------
-app.listen(PORT, function () {
-	 console.log('listening ...');
+db.sequelize.sync().then(function() {
+	app.listen(PORT, function() {
+		console.log('listening ...');
+	});
 });
 
+
+	
