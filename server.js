@@ -109,7 +109,49 @@ app.put('/todos/:id', function(req, res) {
 });
 
 //------------------------------------------------------------
-db.sequelize.sync().then(function() {
+app.post('/users', function(req, res) {
+	var body = _.pick(req.body, 'email', 'password');
+
+	db.user.create(body).then(function(user) {
+		res.json(user.toPublicJSON());
+	}, function(e) {
+		res.status(400).json(e);
+	});
+});
+
+app.post('/users/login', function(req, res) {
+	var body = _.pick(req.body, 'email', 'password');
+
+	db.user.authenticate(body).then(function (user) {
+		res.json(user.toPublicJSON());
+	}, function() {
+		res.status(401).send();
+	});
+
+});
+
+app.delete('/users/:email', function(req, res) {
+	var body = _.pick(req.body, 'email', 'password');
+	var email = req.params.email;
+
+	db.user.findOne({
+		where: body
+	}).then(function(user) {
+		if (!!user) {
+			user.destroy();
+			res.status(204).send();
+		} else {
+			res.status(404).json({ error: "cannot find email"});
+		}
+	}, function (e) {
+		res.status(500).send();
+	});
+
+});
+
+
+//------------------------------------------------------------
+db.sequelize.sync({force: true}).then(function() {
 	app.listen(PORT, function() {
 		console.log('listening ...');
 	});
