@@ -130,21 +130,14 @@ app.post('/users/login', function(req, res) {
 
 });
 
-app.delete('/users/:email', function(req, res) {
+app.delete('/users/delete', function(req, res) {
 	var body = _.pick(req.body, 'email', 'password');
-	var email = req.params.email;
 
-	db.user.findOne({
-		where: body
-	}).then(function(user) {
-		if (!!user) {
-			user.destroy();
-			res.status(204).send();
-		} else {
-			res.status(404).json({ error: "cannot find email"});
-		}
-	}, function (e) {
-		res.status(500).send();
+	db.user.authenticate(body).then(function (user) {
+		user.destroy();
+		res.status(204).send();
+	}, function() {
+		res.status(401).send();
 	});
 
 });
