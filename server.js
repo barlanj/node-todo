@@ -4,13 +4,10 @@ var _ = require('underscore');
 var db = require('./database.js');
 var mw_token = require('./middlewares/tokenAuth.js')(db);
 
-
 var app = express();
 var PORT = process.env.PORT || 3000;
 
 app.use(bodyParser.json());
-//-----------------------------------------------------------
-
 
 
 //-----------------------------------------------------------
@@ -21,6 +18,7 @@ app.get('/', function(req, res) {
 app.get('/todos', mw_token.requireAuth, function(req, res) {
 	var query = req.query;
 	var where = {};
+	where.userId = req.user.get('id');
 
 	if (query.hasOwnProperty('complete') && query.complete === 'true') {
 		where.complete = true;
@@ -34,9 +32,11 @@ app.get('/todos', mw_token.requireAuth, function(req, res) {
 		};
 	}
 
-	db.todo.findAll({where: where}).then(function (todos) {
+	db.todo.findAll({
+		where: where
+	}).then(function(todos) {
 		res.json(todos);
-	}, function (e) {
+	}, function(e) {
 		res.status(500).send();
 	});
 
@@ -45,11 +45,16 @@ app.get('/todos', mw_token.requireAuth, function(req, res) {
 app.get('/todos/:id', mw_token.requireAuth, function(req, res) {
 	var todoId = parseInt(req.params.id, 10);
 
-	db.todo.findById(todoId).then(function(todo) {
-		if(!!todo) {
+	db.todo.findOne({
+		where: {
+			id: todoId,
+			userId: req.user.get('id')
+		}
+	}).then(function(todo) {
+		if (todo) {
 			res.json(todo.toJSON());
 		} else {
-			res.status(404).send();
+			res.status(400).send();
 		}
 	}, function(e) {
 		res.status(500).send();
@@ -61,9 +66,9 @@ app.post('/todos', mw_token.requireAuth, function(req, res) {
 	var body = _.pick(req.body, 'description', 'complete');
 
 	db.todo.create(body).then(function(todo) {
-		req.user.addTodo(todo).then(function () {
+		req.user.addTodo(todo).then(function() {
 			return todo.reload();
-		}).then(function (todo) {
+		}).then(function(todo) {
 			res.json(todo.toJSON());
 		});
 	}, function(e) {
@@ -75,12 +80,21 @@ app.post('/todos', mw_token.requireAuth, function(req, res) {
 app.delete('/todos/:id', mw_token.requireAuth, function(req, res) {
 	var todoId = parseInt(req.params.id, 10);
 
-	db.todo.findById(todoId).then(function(todo) {
-		if(!!todo) {
+	db.todo.findOne({
+		where: {
+			id: todoId,
+			userId: req.user.get('id')
+		}
+	}).then(function(todo) {
+		if (todo) {
 			todo.destroy();
-			res.json({ message: "successfully deleted todo" });
+			res.json({
+				message: "successfully deleted todo"
+			});
 		} else {
-			res.status(404).json({ error: "id not found"});
+			res.status(404).json({
+				error: "id not found"
+			});
 		}
 	}, function(e) {
 		res.status(500).send();
@@ -96,23 +110,30 @@ app.put('/todos/:id', mw_token.requireAuth, function(req, res) {
 
 	if (body.hasOwnProperty('complete')) {
 		attributes.complete = body.complete;
-	} 
+	}
 
 	if (body.hasOwnProperty('description')) {
 		attributes.description = body.description;
 	}
 
-	db.todo.findById(todoId).then(function(todo) {
+	db.todo.findOne({
+		where: {
+			id: todoId,
+			userId: req.user.get('id')
+		}
+	}).then(function(todo) {
 		if (todo) {
-			todo.update(attributes).then(function (todo) {
+			todo.update(attributes).then(function(todo) {
 				res.json(todo.toJSON());
 			}).catch(function(e) {
 				res.status(400).json(e);
 			});
 		} else {
-			res.status(404).json({ error: "id not found"});
+			res.status(404).json({
+				error: "id not found"
+			});
 		}
-	}).catch(function (e) {
+	}).catch(function(e) {
 		res.status(500).send();
 	});
 
@@ -131,41 +152,36 @@ app.post('/users', function(req, res) {
 
 app.post('/users/login', function(req, res) {
 	var body = _.pick(req.body, 'email', 'password');
+	var userInstance;
 
-	db.user.authenticate(body).then(function (user) {
-
+	db.user.authenticate(body).then(function(user) {
 		var token = user.generateToken('authentication');
-		if (token) {
-			res.header('Auth', token).json(user.toPublicJSON());
-		} else {
-			res.status(401).send();
-		}
+		userInstance = user;
 
-	}, function() {
-		res.status(401).send();
+		return db.token.create({
+			token: token
+		});
+	}).then(function(tokenInstance) {
+		res.header('Auth', tokenInstance.token).json(userInstance.toPublicJSON());
+	}).catch(function(e) {
+		res.status(401).send(e);
 	});
 
 });
 
-app.delete('/users/delete', function(req, res) {
-	var body = _.pick(req.body, 'email', 'password');
-
-	db.user.authenticate(body).then(function (user) {
-		user.destroy();
-		res.status(204).send();
-	}, function() {
-		res.status(401).send();
+app.delete('/users/login', mw_token.requireAuth, function(req, res) {
+	req.token.destroy().then(function() {
+		res.status(204).send()
+	}).catch(function() {
+		res.status(500).send();
 	});
-
 });
-
 
 //------------------------------------------------------------
-db.sequelize.sync({force: true}).then(function() {
+db.sequelize.sync({
+	force: true
+}).then(function() {
 	app.listen(PORT, function() {
 		console.log('listening ...');
 	});
 });
-
-
-	
