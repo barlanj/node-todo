@@ -2,6 +2,8 @@ var express = require('express');
 var bodyParser = require('body-parser');
 var _ = require('underscore');
 var db = require('./database.js');
+var mw_token = require('./middlewares/tokenAuth.js')(db);
+
 
 var app = express();
 var PORT = process.env.PORT || 3000;
@@ -12,7 +14,7 @@ app.get('/', function(req, res) {
 	res.send('root');
 });
 
-app.get('/todos', function(req, res) {
+app.get('/todos', mw_token.requireAuth, function(req, res) {
 	var query = req.query;
 	var where = {};
 
@@ -36,7 +38,7 @@ app.get('/todos', function(req, res) {
 
 });
 
-app.get('/todos/:id', function(req, res) {
+app.get('/todos/:id', mw_token.requireAuth, function(req, res) {
 	var todoId = parseInt(req.params.id, 10);
 
 	db.todo.findById(todoId).then(function(todo) {
@@ -51,7 +53,7 @@ app.get('/todos/:id', function(req, res) {
 
 });
 
-app.post('/todos', function(req, res) {
+app.post('/todos', mw_token.requireAuth, function(req, res) {
 	var body = _.pick(req.body, 'description', 'complete');
 
 	db.todo.create(body).then(function(todo) {
@@ -62,7 +64,7 @@ app.post('/todos', function(req, res) {
 
 });
 
-app.delete('/todos/:id', function(req, res) {
+app.delete('/todos/:id', mw_token.requireAuth, function(req, res) {
 	var todoId = parseInt(req.params.id, 10);
 
 	db.todo.findById(todoId).then(function(todo) {
@@ -79,7 +81,7 @@ app.delete('/todos/:id', function(req, res) {
 });
 
 
-app.put('/todos/:id', function(req, res) {
+app.put('/todos/:id', mw_token.requireAuth, function(req, res) {
 	var todoId = parseInt(req.params.id, 10);
 	var body = _.pick(req.body, 'description', 'complete');
 	var attributes = {};
@@ -130,7 +132,7 @@ app.post('/users/login', function(req, res) {
 		} else {
 			res.status(401).send();
 		}
-		
+
 	}, function() {
 		res.status(401).send();
 	});
