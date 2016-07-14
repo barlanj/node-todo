@@ -10,6 +10,10 @@ var PORT = process.env.PORT || 3000;
 
 app.use(bodyParser.json());
 //-----------------------------------------------------------
+
+
+
+//-----------------------------------------------------------
 app.get('/', function(req, res) {
 	res.send('root');
 });
@@ -57,7 +61,11 @@ app.post('/todos', mw_token.requireAuth, function(req, res) {
 	var body = _.pick(req.body, 'description', 'complete');
 
 	db.todo.create(body).then(function(todo) {
-		res.json(todo.toJSON());
+		req.user.addTodo(todo).then(function () {
+			return todo.reload();
+		}).then(function (todo) {
+			res.json(todo.toJSON());
+		});
 	}, function(e) {
 		res.status(400).json(e);
 	});
